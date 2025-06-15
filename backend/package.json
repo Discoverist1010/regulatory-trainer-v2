@@ -1,0 +1,17 @@
+{
+    "name": "nf-trainer-backend",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node --watch server.js"
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.20.0",
+        "cors": "^2.8.5",
+        "express": "^4.18.2",
+        "express-rate-limit": "^7.1.5",
+        "multer": "^2.0.1",
+        "pdf-parse": "^1.1.1"
+    }
+}
