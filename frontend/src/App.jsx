@@ -139,15 +139,14 @@ function App() {
     );
   };
 
-  // FIXED: Simplified submitAnalysis function
+  // ENHANCED: Advanced AI Analysis with Claude Integration
   const submitAnalysis = async () => {
     // Prevent multiple submissions
     if (analyzing) return;
 
-    // Validate submission
-    const summaryWords = state.submission.summary.trim().split(/\s+/).filter(w => w.length > 0).length;
-    if (summaryWords < 30 || summaryWords > 100) {
-      alert('Please write a summary between 30-100 words');
+    // Basic validation only
+    if (!state.submission.summary.trim()) {
+      alert('Please write an executive summary');
       return;
     }
 
@@ -171,14 +170,15 @@ function App() {
         documentContent: state.documentContent
       };
 
-      console.log('Submitting analysis:', submissionData);
+      console.log('Submitting for advanced AI analysis:', submissionData);
 
       const response = await fetch('https://regulatory-trainer-v2-production.up.railway.app/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(submissionData)
+        body: JSON.stringify(submissionData),
+        timeout: 45000 // 45 second timeout for Claude
       });
 
       if (!response.ok) {
@@ -186,37 +186,50 @@ function App() {
       }
 
       const result = await response.json();
-      console.log('Analysis result:', result);
+      console.log('AI Analysis result:', result);
 
-      // Update state to show feedback
-      updateState({
-        mode: 'feedback',
-        score: result.score || 0,
-        feedback: result.feedback || {
-          items: [{ type: 'info', text: 'Analysis completed successfully' }],
-          improvements: ['Continue practicing to improve your skills']
-        }
-      });
+      // Check if we got real Claude feedback vs local fallback
+      if (result.source === 'claude' && result.enhanced) {
+        // Real Claude AI feedback
+        updateState({
+          mode: 'feedback',
+          score: result.score || 0,
+          feedback: result.feedback
+        });
+      } else if (result.source === 'local') {
+        // Enhanced local analysis for better feedback
+        const enhancedFeedback = generateEnhancedLocalFeedback(state.submission, state.documentContent);
+        updateState({
+          mode: 'feedback',
+          score: enhancedFeedback.score,
+          feedback: enhancedFeedback.feedback
+        });
+      } else {
+        // Use whatever feedback we got
+        updateState({
+          mode: 'feedback',
+          score: result.score || 0,
+          feedback: result.feedback || {
+            items: [{ type: 'info', text: 'Analysis completed successfully' }],
+            improvements: ['Continue practicing to improve your skills']
+          }
+        });
+      }
 
     } catch (error) {
       console.error('Analysis error:', error);
       
-      // Provide local fallback scoring
-      const localScore = calculateLocalScore(state.submission);
+      // Enhanced local analysis as fallback
+      const enhancedFeedback = generateEnhancedLocalFeedback(state.submission, state.documentContent);
       
       updateState({
         mode: 'feedback',
-        score: localScore,
+        score: enhancedFeedback.score,
         feedback: {
+          ...enhancedFeedback.feedback,
           items: [
-            { type: 'warning', text: 'AI analysis temporarily unavailable - local scoring provided' },
-            { type: 'info', text: `Your submission has been evaluated with a score of ${localScore}/100` }
-          ],
-          improvements: [
-            'Ensure executive summary is 30-100 words',
-            'Provide specific business impact analysis',
-            'Include clear document structure',
-            'Try again when AI service is available for detailed feedback'
+            { type: 'warning', text: 'AI service temporarily unavailable - enhanced local analysis provided' },
+            ...enhancedFeedback.feedback.items
           ]
         }
       });
@@ -225,30 +238,147 @@ function App() {
     }
   };
 
-  // Local scoring calculation
-  const calculateLocalScore = (submission) => {
+  // ENHANCED: Advanced local analysis for better feedback
+  const generateEnhancedLocalFeedback = (submission, documentContent) => {
+    const feedback = { items: [], improvements: [] };
     let score = 0;
     
+    // Analyze summary in detail
     const summaryWords = submission.summary.trim().split(/\s+/).filter(w => w.length > 0).length;
-    if (summaryWords >= 30 && summaryWords <= 100) {
-      score += 40;
-    } else if (summaryWords >= 20) {
+    const summaryText = submission.summary.toLowerCase();
+    
+    // Check for nonsensical content
+    const nonsensePatterns = [
+      /^[a-z\s]{1,10}$/,  // Too short/simple
+      /(.)\1{3,}/,        // Repeated characters
+      /^[^a-z]*$/i,       // No real words
+      /^\s*$|^\.+$|^\w{1,3}\s*$/  // Empty or minimal
+    ];
+    
+    const isNonsensical = nonsensePatterns.some(pattern => pattern.test(submission.summary.trim()));
+    
+    if (isNonsensical) {
+      feedback.items.push({
+        type: 'error',
+        text: 'Summary appears to contain nonsensical or insufficient content. Please write a coherent executive summary about the regulatory document.'
+      });
+      score += 5; // Very low score for nonsense
+    } else if (summaryWords >= 30 && summaryWords <= 100) {
+      feedback.items.push({
+        type: 'good',
+        text: `Excellent summary length (${summaryWords} words) - meets professional standards`
+      });
+      score += 35;
+    } else if (summaryWords < 30) {
+      feedback.items.push({
+        type: 'error',
+        text: `Summary too brief (${summaryWords} words). Regulatory newsflashes need 30-100 words for adequate detail.`
+      });
+      score += Math.max(0, summaryWords * 1.2);
+    } else {
+      feedback.items.push({
+        type: 'warning',
+        text: `Summary too long (${summaryWords} words). Executives prefer concise 30-100 word summaries.`
+      });
       score += 20;
     }
     
-    if (submission.impacts.trim().length > 100) {
-      score += 30;
-    } else if (submission.impacts.trim().length > 50) {
+    // Analyze content quality
+    const hasRegTerms = /regulat|complian|legal|policy|rule|standard|requirement|guideline/i.test(summaryText);
+    const hasBusinessTerms = /impact|cost|risk|timeline|implement|business|client|market/i.test(summaryText);
+    
+    if (!hasRegTerms && !isNonsensical) {
+      feedback.items.push({
+        type: 'warning',
+        text: 'Summary lacks regulatory terminology. Include words like "compliance," "requirements," or "regulations."'
+      });
+    } else if (hasRegTerms) {
+      feedback.items.push({
+        type: 'good',
+        text: 'Good use of regulatory terminology in summary'
+      });
+      score += 10;
+    }
+    
+    // Analyze impact analysis
+    const impactText = submission.impacts.toLowerCase();
+    const impactLength = submission.impacts.trim().length;
+    
+    if (impactLength < 50) {
+      feedback.items.push({
+        type: 'error',
+        text: 'Impact analysis too brief. Clients need detailed analysis of business implications.'
+      });
+      feedback.improvements.push('Expand impact analysis to include financial, operational, and timeline implications');
+    } else if (impactLength > 150) {
+      feedback.items.push({
+        type: 'good',
+        text: 'Comprehensive impact analysis with good detail level'
+      });
+      score += 25;
+    } else {
+      feedback.items.push({
+        type: 'warning',
+        text: 'Impact analysis could be more detailed for better client value'
+      });
       score += 15;
     }
     
-    if (submission.structure.trim().length > 50) {
-      score += 30;
-    } else if (submission.structure.trim().length > 20) {
-      score += 15;
+    // Check for specific impact categories
+    const hasFinancial = /cost|budget|expense|revenue|financial|money|dollar|\$|price/i.test(impactText);
+    const hasTimeline = /deadline|timeline|date|month|year|immediate|urgent|delay/i.test(impactText);
+    const hasRisk = /risk|challenge|concern|issue|problem|difficulty/i.test(impactText);
+    
+    if (!hasFinancial) {
+      feedback.improvements.push('Include specific financial impact estimates (costs, budget implications)');
+    }
+    if (!hasTimeline) {
+      feedback.improvements.push('Add timeline information (implementation deadlines, effective dates)');
+    }
+    if (!hasRisk) {
+      feedback.improvements.push('Identify potential risks and challenges for client planning');
     }
     
-    return Math.min(score, 100);
+    // Analyze document structure
+    const structureText = submission.structure.toLowerCase();
+    const structureLength = submission.structure.trim().length;
+    
+    if (structureLength < 30) {
+      feedback.items.push({
+        type: 'error',
+        text: 'Document structure outline is too minimal. Provide clear section organization.'
+      });
+      feedback.improvements.push('Create detailed document structure with clear section headers and organization');
+    } else {
+      const hasHeaders = /section|header|summary|conclusion|background|analysis|recommendation/i.test(structureText);
+      if (hasHeaders) {
+        feedback.items.push({
+          type: 'good',
+          text: 'Good document structure with clear sections identified'
+        });
+        score += 20;
+      } else {
+        feedback.items.push({
+          type: 'warning',
+          text: 'Structure could benefit from more specific section headers'
+        });
+        score += 10;
+      }
+    }
+    
+    // Overall quality assessment
+    if (score < 30) {
+      feedback.improvements.unshift('Focus on writing coherent, professional content that demonstrates understanding of regulatory requirements');
+    } else if (score < 60) {
+      feedback.improvements.unshift('Good foundation - enhance with more specific business details and professional language');
+    } else {
+      feedback.improvements.unshift('Strong work - fine-tune details for maximum client impact');
+    }
+    
+    return {
+      score: Math.min(Math.max(score, 0), 100),
+      feedback
+    };
   };
 
   const formatTime = (seconds) => {
