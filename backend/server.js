@@ -30,19 +30,48 @@ app.use('/api/health', healthRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/analyze', analyzeRouter);
 
-// Add this temporary debug route to your backend/server.js
-// (Place it with your other routes)
+// Debug routes - MOVED BEFORE 404 HANDLER
 app.get('/api/debug/claude', (req, res) => {
   res.json({
     hasClaudeKey: !!process.env.CLAUDE_API_KEY,
     keyPrefix: process.env.CLAUDE_API_KEY ? process.env.CLAUDE_API_KEY.substring(0, 15) + '...' : 'Not found',
     nodeEnv: process.env.NODE_ENV,
-    // Import claude to check its state
     claudeState: {
       fallbackActive: claude.fallbackActive,
       retryCount: claude.retryCount
     }
   });
+});
+
+app.get('/api/debug/prompt', (req, res) => {
+  const testSubmission = {
+    summary: "Test summary for checking prompt",
+    impacts: "Test impact analysis",
+    structure: "Test structure"
+  };
+  
+  try {
+    // Get the current prompt being used
+    const prompt = claude.buildEnhancedPrompt(testSubmission, "Test document content");
+    
+    res.json({
+      success: true,
+      hasPrompt: !!prompt,
+      promptLength: prompt.length,
+      includesProfessionalExample: prompt.includes('professionalExample'),
+      includesMandatory: prompt.includes('MANDATORY'),
+      includesSONNET4: prompt.includes('claude-sonnet-4'),
+      promptPreview: prompt.substring(0, 500) + '...',
+      promptEnd: '...' + prompt.substring(prompt.length - 300)
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      hasClaudeMethod: typeof claude.buildEnhancedPrompt === 'function',
+      claudeKeys: Object.getOwnPropertyNames(claude)
+    });
+  }
 });
 
 // Error handling
@@ -55,7 +84,7 @@ app.use((error, req, res, next) => {
   });
 });
 
-// 404 handler
+// 404 handler - MUST BE LAST
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
@@ -66,33 +95,4 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
-
-// Add this temporary debug route to backend/server.js
-
-app.get('/api/debug/prompt', (req, res) => {
-  // Import claude to check the current prompt method
-  const testSubmission = {
-    summary: "Test summary for checking prompt",
-    impacts: "Test impact analysis",
-    structure: "Test structure"
-  };
-  
-  try {
-    // Get the current prompt being used
-    const prompt = claude.buildEnhancedPrompt(testSubmission, "Test document content");
-    
-    res.json({
-      hasPrompt: !!prompt,
-      promptLength: prompt.length,
-      includesProfessionalExample: prompt.includes('professionalExample'),
-      includesSONNET4: prompt.includes('claude-sonnet-4'),
-      promptPreview: prompt.substring(0, 500) + '...'
-    });
-  } catch (error) {
-    res.json({
-      error: error.message,
-      hasClaudeMethod: typeof claude.buildEnhancedPrompt === 'function'
-    });
-  }
 });
