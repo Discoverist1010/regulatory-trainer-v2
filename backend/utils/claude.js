@@ -115,6 +115,9 @@ CRITICAL ASSESSMENT REQUIRED:
 - If content is coherent but basic, provide specific improvement guidance
 - If content is strong, identify what makes it effective
 
+ADDITIONAL REQUIREMENT - PROFESSIONAL IMPACT ANALYSIS EXAMPLE:
+Based on the regulatory document, write a professional version of the impact analysis that demonstrates best practices. This should be 2-3 sentences that clearly identify specific business impacts, timelines, costs, or compliance requirements that clients need to know.
+
 Respond in this EXACT JSON format:
 {
   "score": [0-100 integer],
@@ -128,6 +131,9 @@ Respond in this EXACT JSON format:
       "Specific actionable improvement #2",
       "Specific actionable improvement #3"
     ]
+  },
+  "professionalExample": {
+    "impactAnalysis": "Professional 2-3 sentence impact analysis showing best practices for this specific regulatory document"
   }
 }
 
