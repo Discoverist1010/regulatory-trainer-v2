@@ -1,4 +1,4 @@
-// Fixed backend/utils/claude.js - Replace your current file with this
+// Enhanced backend/utils/claude.js - Improved professional example handling
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -8,9 +8,8 @@ class ClaudeAnalyzer {
       apiKey: process.env.CLAUDE_API_KEY
     });
     this.retryCount = 2;
-    this.fallbackActive = false; // Initialize properly
+    this.fallbackActive = false;
     
-    // Add debug logging
     console.log('ClaudeAnalyzer initialized:', {
       hasApiKey: !!process.env.CLAUDE_API_KEY,
       keyPrefix: process.env.CLAUDE_API_KEY ? process.env.CLAUDE_API_KEY.substring(0, 10) + '...' : 'Missing'
@@ -20,7 +19,6 @@ class ClaudeAnalyzer {
   async analyzeSubmission(submission, documentContent) {
     console.log('analyzeSubmission called, fallbackActive:', this.fallbackActive);
     
-    // Check if we have API key
     if (!process.env.CLAUDE_API_KEY) {
       console.warn('No Claude API key found, using local fallback');
       return this.enhancedLocalFallback(submission);
@@ -29,9 +27,6 @@ class ClaudeAnalyzer {
     for (let attempt = 1; attempt <= this.retryCount; attempt++) {
       try {
         console.log(`Claude API attempt ${attempt}/${this.retryCount}`);
-
-        // REMOVED PROBLEMATIC CIRCUIT BREAKER LOGIC
-        // The random circuit breaker was preventing API calls
 
         const prompt = this.buildEnhancedPrompt(submission, documentContent);
         
@@ -45,7 +40,7 @@ class ClaudeAnalyzer {
 
         console.log('Claude API call successful!');
         const analysis = this.parseResponse(response.content[0].text);
-        this.fallbackActive = false; // Reset on success
+        this.fallbackActive = false;
         
         return {
           ...analysis,
@@ -60,23 +55,19 @@ class ClaudeAnalyzer {
           type: error.constructor.name
         });
 
-        // Handle rate limiting
         if (error.status === 429) {
           console.log(`Rate limited, waiting ${1000 * attempt * 2}ms...`);
           await this.sleep(1000 * attempt * 2);
         } 
-        // Handle server errors
         else if (error.status >= 500) {
           console.log('Server error detected, will use fallback after retries');
           this.fallbackActive = true;
         }
-        // Handle auth errors (don't retry these)
         else if (error.status === 401 || error.status === 403) {
           console.error('Authentication error - check API key');
-          break; // Don't retry auth errors
+          break;
         }
 
-        // If this was the last attempt, use fallback
         if (attempt === this.retryCount) {
           console.warn('All Claude API attempts failed, using enhanced local fallback');
           return this.enhancedLocalFallback(submission);
@@ -84,14 +75,13 @@ class ClaudeAnalyzer {
       }
     }
 
-    // Fallback if all attempts failed
     return this.enhancedLocalFallback(submission);
   }
 
   buildEnhancedPrompt(submission, documentContent) {
     const truncatedDoc = documentContent ? documentContent.slice(0, 3000) : 'No document content provided';
     
-    return `You are an expert regulatory writing instructor with 15+ years of experience training financial services professionals. Analyze this student's regulatory newsflash submission with honesty and specific, professional and actionable feedback.
+    return `You are an expert regulatory writing instructor with 15+ years of experience training financial services professionals. Analyze this student's regulatory newsflash submission with detailed feedback AND provide a professional example.
 
 REGULATORY DOCUMENT EXCERPT:
 ${truncatedDoc}
@@ -115,10 +105,15 @@ CRITICAL ASSESSMENT REQUIRED:
 - If content is coherent but basic, provide specific improvement guidance
 - If content is strong, identify what makes it effective
 
-ADDITIONAL REQUIREMENT - PROFESSIONAL IMPACT ANALYSIS EXAMPLE:
-Based on the regulatory document, write a professional version of the impact analysis that demonstrates best practices. This should be 2-3 sentences that clearly identify specific business impacts, timelines, costs, or compliance requirements that clients need to know.
+MANDATORY REQUIREMENT - PROFESSIONAL IMPACT ANALYSIS EXAMPLE:
+You MUST provide a professional version of the impact analysis that demonstrates best practices. Write 2-3 sentences that:
+- Identify specific business impacts with concrete details
+- Include timelines, costs, or quantified metrics where possible
+- Use professional regulatory language
+- Focus on actionable client concerns
+- Based on the actual regulatory document provided
 
-Respond in this EXACT JSON format:
+Respond in this EXACT JSON format (ensure professionalExample is always included):
 {
   "score": [0-100 integer],
   "feedback": {
@@ -133,39 +128,51 @@ Respond in this EXACT JSON format:
     ]
   },
   "professionalExample": {
-    "impactAnalysis": "Professional 2-3 sentence impact analysis showing best practices for this specific regulatory document"
+    "impactAnalysis": "Write a professional 2-3 sentence impact analysis here that demonstrates best practices for this specific regulatory document. Include specific business impacts, timelines, costs, or compliance requirements that clients need to know."
   }
 }
 
-Be specific, professional, honest, and educational. If the work is poor quality, say so clearly and explain why.`;
+IMPORTANT: You must always include the professionalExample field with a meaningful impact analysis, even if the student's work is poor quality.`;
   }
 
   parseResponse(responseText) {
+    console.log('Parsing Claude response, length:', responseText.length);
+    
     try {
       // Try to extract JSON from response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         
+        console.log('Parsed response keys:', Object.keys(parsed));
+        console.log('Has professionalExample:', !!parsed.professionalExample);
+        
         // Validate the response structure
         if (parsed.score !== undefined && parsed.feedback && parsed.feedback.items) {
+          // Ensure professionalExample exists, create fallback if missing
+          if (!parsed.professionalExample || !parsed.professionalExample.impactAnalysis) {
+            console.warn('Claude response missing professionalExample, adding fallback');
+            parsed.professionalExample = {
+              impactAnalysis: "This regulation requires immediate compliance review and risk assessment. Financial institutions should evaluate operational impacts, allocate resources for implementation, and establish monitoring procedures. Estimated compliance costs and implementation timelines should be assessed based on current infrastructure capabilities."
+            };
+          }
+          
           return parsed;
         }
       }
       
-      // Fallback parsing if JSON is malformed
+      console.warn('JSON parsing failed, using fallback extraction');
       return this.extractFeedbackFromText(responseText);
     } catch (error) {
       console.error('Failed to parse Claude response:', error);
+      console.log('Response text preview:', responseText.substring(0, 200));
       return this.createBasicFeedback(responseText);
     }
   }
 
   extractFeedbackFromText(text) {
-    // More sophisticated text parsing for non-JSON responses
-    const lines = text.split('\n').filter(line => line.trim());
+    console.log('Using fallback text extraction');
     
-    // Try to extract score
     const scoreMatch = text.match(/score[:\s]*(\d+)/i);
     const score = scoreMatch ? parseInt(scoreMatch[1]) : 50;
     
@@ -180,6 +187,9 @@ Be specific, professional, honest, and educational. If the work is poor quality,
           'Focus on professional language and structure',
           'Ensure content demonstrates regulatory understanding'
         ]
+      },
+      professionalExample: {
+        impactAnalysis: "This regulation introduces new compliance requirements that require immediate attention. Organizations should conduct impact assessments, review current procedures, and develop implementation strategies with appropriate timelines and resource allocation."
       }
     };
   }
@@ -190,11 +200,7 @@ Be specific, professional, honest, and educational. If the work is poor quality,
     let score = 0;
     const feedback = { items: [], improvements: [] };
 
-    // Enhanced analysis similar to frontend
     const summaryWords = submission.summary.trim().split(/\s+/).filter(w => w.length > 0).length;
-    const summaryText = submission.summary.toLowerCase();
-    
-    // Check for nonsensical content
     const isNonsensical = /^[a-z\s]{1,10}$|(.)\1{3,}|^[^a-z]*$/i.test(submission.summary.trim());
     
     if (isNonsensical) {
@@ -217,7 +223,6 @@ Be specific, professional, honest, and educational. If the work is poor quality,
       });
     }
 
-    // Analyze impact quality
     if (submission.impacts.length > 100) {
       score += 30;
       feedback.items.push({
@@ -229,21 +234,25 @@ Be specific, professional, honest, and educational. If the work is poor quality,
       feedback.improvements.push('Expand impact analysis with specific business implications');
     }
 
-    // Analyze structure
     if (submission.structure.length > 50) {
       score += 25;
     } else {
       feedback.improvements.push('Provide more detailed document structure outline');
     }
 
-    // Add general improvements
     if (score < 50) {
       feedback.improvements.unshift('Focus on coherent, professional regulatory content');
     }
 
+    // Always provide professional example - even in local fallback
+    const professionalExample = {
+      impactAnalysis: "This regulatory change requires immediate compliance assessment by [implementation deadline]. Financial institutions must evaluate operational modifications, allocate compliance resources, and update risk management frameworks. Implementation costs are estimated at $X-Y per institution, with phased rollout recommended over 6-12 months."
+    };
+
     return {
       score: Math.min(score, 100),
       feedback,
+      professionalExample, // Always include this
       source: 'local',
       enhanced: true,
       message: 'Enhanced local analysis provided. Claude AI will provide more detailed feedback when available.'
@@ -262,6 +271,9 @@ Be specific, professional, honest, and educational. If the work is poor quality,
           'Include quantified business impacts and timelines',
           'Provide clear document structure with section headers'
         ]
+      },
+      professionalExample: {
+        impactAnalysis: "Professional regulatory impact analysis should include specific business implications, quantified costs or timelines, and actionable compliance requirements for effective client communication."
       },
       rawResponse: originalResponse
     };
