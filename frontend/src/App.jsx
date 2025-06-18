@@ -9,7 +9,7 @@ import api from './utils/api';
 const translations = {
   en: {
     appTitle: "Regulatory Reporter",
-    appSubtitle: "Practice regulatory newsflash writing",
+    appSubtitle: "Master regulatory newsflash writing",
     trainerSetup: "Trainer Setup",
     studentMode: "Student Mode",
     uploadMaterials: "Upload Training Materials",
@@ -248,24 +248,102 @@ function App() {
     );
   };
 
+  // FIXED: Complete submitAnalysis function with proper error handling
   const submitAnalysis = async () => {
-    const submissionData = {
-      sessionId: state.sessionId,
-      language: state.language,
-      submission: state.submission,
-      documentContent: state.documentContent
-    };
-
-    await execute(
-      () => api.analyzeSubmission(submissionData),
-      (result) => {
-        updateState({
-          mode: 'feedback',
-          score: result.score,
-          feedback: result.feedback
-        });
+    try {
+      // Validate submission before sending
+      if (!state.submission.summary?.trim()) {
+        alert('Please write an executive summary before submitting');
+        return;
       }
-    );
+
+      if (!state.submission.impacts?.trim()) {
+        alert('Please write an impact analysis before submitting');
+        return;
+      }
+
+      const submissionData = {
+        sessionId: state.sessionId,
+        language: state.language,
+        submission: state.submission,
+        documentContent: state.documentContent
+      };
+
+      console.log('Submitting analysis with data:', submissionData);
+
+      await execute(
+        () => api.analyzeSubmission(submissionData),
+        (result) => {
+          console.log('Analysis result received:', result);
+          
+          // Update state with feedback results
+          updateState({
+            mode: 'feedback',
+            score: result.score || 0,
+            feedback: result.feedback || {
+              items: [{ type: 'info', text: 'Analysis completed successfully' }],
+              improvements: ['Continue practicing to improve your skills']
+            }
+          });
+        },
+        { 
+          timeout: 60000, // 60 second timeout for AI analysis
+          retries: 1 // Only retry once for analysis
+        }
+      );
+
+    } catch (error) {
+      console.error('Submit analysis error:', error);
+      
+      // Provide fallback feedback if API fails
+      const fallbackScore = calculateLocalScore(state.submission);
+      
+      updateState({
+        mode: 'feedback',
+        score: fallbackScore,
+        feedback: {
+          items: [
+            { type: 'warning', text: 'AI analysis temporarily unavailable - local scoring provided' },
+            { type: 'info', text: `Your submission has been evaluated with a score of ${fallbackScore}/100` }
+          ],
+          improvements: [
+            'Ensure executive summary is 30-100 words',
+            'Provide specific business impact analysis',
+            'Include clear document structure',
+            'Try again when AI service is available for detailed feedback'
+          ]
+        }
+      });
+    }
+  };
+
+  // Helper function for local scoring when AI fails
+  const calculateLocalScore = (submission) => {
+    let score = 0;
+    
+    // Check summary length (30-100 words)
+    const summaryWords = submission.summary.trim().split(/\s+/).filter(w => w.length > 0).length;
+    if (summaryWords >= 30 && summaryWords <= 100) {
+      score += 40;
+    } else if (summaryWords >= 20) {
+      score += 20;
+    }
+    
+    // Check impact analysis length
+    if (submission.impacts.trim().length > 100) {
+      score += 30;
+    } else if (submission.impacts.trim().length > 50) {
+      score += 15;
+    }
+    
+    // Check structure
+    if (submission.structure.trim().length > 50) {
+      score += 30;
+    } else if (submission.structure.trim().length > 20) {
+      score += 15;
+    }
+    
+    return Math.min(score, 100);
   };
 
   const formatTime = (seconds) => {
@@ -284,6 +362,7 @@ function App() {
     switch (type) {
       case 'good': return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'warning': return <AlertCircle className="w-5 h-5 text-yellow-500" />;
+      case 'info': return <CheckCircle className="w-5 h-5 text-blue-500" />;
       default: return <AlertCircle className="w-5 h-5 text-red-500" />;
     }
   };
@@ -292,6 +371,14 @@ function App() {
   const canStartTraining = () => {
     const fileInfo = uploadedFiles[state.language];
     return fileInfo && fileInfo.sessionId && !loading;
+  };
+
+  // Check if submission is valid
+  const isValidSubmission = () => {
+    const summaryWords = state.submission.summary.trim().split(/\s+/).filter(w => w.length > 0).length;
+    return summaryWords >= 30 && summaryWords <= 100 && 
+           state.submission.impacts.trim().length > 50 &&
+           state.submission.structure.trim().length > 20;
   };
 
   // Home Screen
@@ -443,15 +530,6 @@ function App() {
                     }
                   </p>
                 )}
-
-                {/* Debug info - remove in production */}
-                {process.env.NODE_ENV === 'development' && (
-                  <div className="mt-4 text-xs text-blue-300">
-                    <div>Session ID: {state.sessionId || 'None'}</div>
-                    <div>Language: {state.language}</div>
-                    <div>File for {state.language}: {uploadedFiles[state.language]?.name || 'None'}</div>
-                  </div>
-                )}
               </div>
             </>
           )}
@@ -575,7 +653,7 @@ function App() {
                 {/* Submit Button */}
                 <button 
                   onClick={submitAnalysis}
-                  disabled={loading || !state.submission.summary.trim() || !isValidSummary}
+                  disabled={loading || !state.submission.summary.trim()}
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-lg"
                 >
                   {loading ? t.analyzing : t.submitNewsflash}
@@ -637,6 +715,7 @@ function App() {
                     <div key={index} className={`p-4 rounded-lg border-l-4 flex items-start gap-3 ${
                       item.type === 'good' ? 'bg-green-50 border-green-400' :
                       item.type === 'warning' ? 'bg-yellow-50 border-yellow-400' :
+                      item.type === 'info' ? 'bg-blue-50 border-blue-400' :
                       'bg-red-50 border-red-400'
                     }`}>
                       {getFeedbackIcon(item.type)}
