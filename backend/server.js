@@ -67,3 +67,32 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+// Add this temporary debug route to backend/server.js
+
+app.get('/api/debug/prompt', (req, res) => {
+  // Import claude to check the current prompt method
+  const testSubmission = {
+    summary: "Test summary for checking prompt",
+    impacts: "Test impact analysis",
+    structure: "Test structure"
+  };
+  
+  try {
+    // Get the current prompt being used
+    const prompt = claude.buildEnhancedPrompt(testSubmission, "Test document content");
+    
+    res.json({
+      hasPrompt: !!prompt,
+      promptLength: prompt.length,
+      includesProfessionalExample: prompt.includes('professionalExample'),
+      includesSONNET4: prompt.includes('claude-sonnet-4'),
+      promptPreview: prompt.substring(0, 500) + '...'
+    });
+  } catch (error) {
+    res.json({
+      error: error.message,
+      hasClaudeMethod: typeof claude.buildEnhancedPrompt === 'function'
+    });
+  }
+});
