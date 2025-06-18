@@ -37,7 +37,7 @@ class ClaudeAnalyzer {
         
         console.log('Making Claude API call...');
         const response = await this.client.messages.create({
-          model: 'claude-3-7-sonnet-20250219',
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 2000,
           temperature: 0.2,
           messages: [{ role: 'user', content: prompt }]
