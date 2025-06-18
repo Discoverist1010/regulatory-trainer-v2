@@ -1,9 +1,132 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, FileText, Upload, BookOpen, Settings, Award, CheckCircle, AlertCircle, Globe } from 'lucide-react';
+import { Clock, FileText, Upload, BookOpen, Settings, Award, CheckCircle, AlertCircle, Globe, Users } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useGameState } from './hooks/useGameState';
 import { useAPI } from './hooks/useAPI';
 import api from './utils/api';
+
+// Impact Analysis Comparison Component
+const ImpactComparison = ({ userImpact, professionalExample, language = 'en' }) => {
+  const translations = {
+    en: {
+      title: "Impact Analysis Comparison",
+      yourAnalysis: "Your Analysis",
+      professionalExample: "Professional Example",
+      learnFrom: "Learn from this professional approach:",
+      noExample: "Professional example not available",
+      keyDifferences: "Key Differences",
+      specificity: "Specific details & timelines",
+      business: "Clear business implications",
+      structure: "Professional structure"
+    },
+    id: {
+      title: "Perbandingan Analisis Dampak",
+      yourAnalysis: "Analisis Anda",
+      professionalExample: "Contoh Profesional",
+      learnFrom: "Pelajari dari pendekatan profesional ini:",
+      noExample: "Contoh profesional tidak tersedia",
+      keyDifferences: "Perbedaan Utama",
+      specificity: "Detail spesifik & jadwal",
+      business: "Implikasi bisnis yang jelas",
+      structure: "Struktur profesional"
+    },
+    'zh-CN': {
+      title: "影响分析对比",
+      yourAnalysis: "您的分析",
+      professionalExample: "专业示例",
+      learnFrom: "学习这种专业方法:",
+      noExample: "专业示例不可用",
+      keyDifferences: "主要差异",
+      specificity: "具体细节和时间表",
+      business: "明确的业务影响",
+      structure: "专业结构"
+    },
+    'zh-TW': {
+      title: "影響分析對比",
+      yourAnalysis: "您的分析",
+      professionalExample: "專業示例",
+      learnFrom: "學習這種專業方法:",
+      noExample: "專業示例不可用",
+      keyDifferences: "主要差異",
+      specificity: "具體細節和時間表",
+      business: "明確的業務影響",
+      structure: "專業結構"
+    }
+  };
+
+  const t = translations[language] || translations.en;
+
+  if (!professionalExample?.impactAnalysis) {
+    return null; // Don't show if no professional example
+  }
+
+  return (
+    <div className="mt-8 bg-white border border-gray-200 rounded-lg shadow-sm">
+      <div className="p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-t-lg border-b border-gray-200">
+        <h3 className="text-xl font-bold text-gray-800 flex items-center mb-2">
+          <Users className="w-6 h-6 mr-3 text-indigo-600" />
+          {t.title}
+        </h3>
+        <p className="text-sm text-gray-600">{t.learnFrom}</p>
+      </div>
+      
+      <div className="grid md:grid-cols-2 gap-0">
+        {/* User's Analysis */}
+        <div className="p-6 border-r border-gray-200">
+          <h4 className="font-semibold text-gray-800 mb-4 flex items-center">
+            <span className="w-3 h-3 bg-orange-500 rounded-full mr-3"></span>
+            {t.yourAnalysis}
+          </h4>
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 min-h-[120px]">
+            <p className="text-gray-800 leading-relaxed">
+              {userImpact || "No impact analysis provided"}
+            </p>
+          </div>
+          <div className="mt-3 text-sm text-gray-500 flex justify-between">
+            <span>Words: {userImpact ? userImpact.trim().split(/\s+/).length : 0}</span>
+            <span>Characters: {userImpact ? userImpact.length : 0}</span>
+          </div>
+        </div>
+
+        {/* Professional Example */}
+        <div className="p-6">
+          <h4 className="font-semibold text-gray-800 mb-4 flex items-center">
+            <span className="w-3 h-3 bg-green-500 rounded-full mr-3"></span>
+            {t.professionalExample}
+          </h4>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 min-h-[120px]">
+            <p className="text-gray-800 leading-relaxed">
+              {professionalExample.impactAnalysis}
+            </p>
+          </div>
+          <div className="mt-3 text-sm text-gray-500 flex justify-between">
+            <span>Words: {professionalExample.impactAnalysis.trim().split(/\s+/).length}</span>
+            <span>Characters: {professionalExample.impactAnalysis.length}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Key Differences Highlight */}
+      <div className="p-6 bg-gray-50 rounded-b-lg border-t border-gray-200">
+        <h5 className="font-medium text-gray-700 mb-3">{t.keyDifferences}:</h5>
+        <div className="grid md:grid-cols-3 gap-4 text-sm">
+          <div className="flex items-center text-gray-600">
+            <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+            {t.specificity}
+          </div>
+          <div className="flex items-center text-gray-600">
+            <CheckCircle className="w-4 h-4 text-blue-500 mr-2" />
+            {t.business}
+          </div>
+          <div className="flex items-center text-gray-600">
+            <CheckCircle className="w-4 h-4 text-purple-500 mr-2" />
+            {t.structure}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Simplified translations - keeping only English for now to reduce complexity
 const translations = {
@@ -55,7 +178,8 @@ function App() {
   const { loading, error, execute } = useAPI();
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [interfaceLanguage, setInterfaceLanguage] = useState('en');
-  const [analyzing, setAnalyzing] = useState(false); // Separate analyzing state
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null); // Store full analysis result
 
   const t = translations[interfaceLanguage] || translations.en;
 
@@ -93,8 +217,6 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [state.mode, state.timeLeft, updateState, analyzing]);
-
-  // REMOVED: Auto-submit when time runs out to prevent unwanted submissions
 
   const handleFileUpload = async (language, file) => {
     if (!file || file.type !== 'application/pdf') {
@@ -187,6 +309,9 @@ function App() {
 
       const result = await response.json();
       console.log('AI Analysis result:', result);
+
+      // Store the full result including professional example
+      setAnalysisResult(result);
 
       // Check if we got real Claude feedback vs local fallback
       if (result.source === 'claude' && result.enhanced) {
@@ -721,7 +846,7 @@ function App() {
     );
   }
 
-  // Feedback Screen - IMPROVED CONTRAST
+  // Feedback Screen - ENHANCED WITH IMPACT COMPARISON
   if (state.mode === 'feedback') {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -784,20 +909,35 @@ function App() {
                 </div>
               )}
 
+              {/* Impact Analysis Comparison - NEW FEATURE */}
+              {analysisResult?.professionalExample && (
+                <ImpactComparison 
+                  userImpact={state.submission?.impacts}
+                  professionalExample={analysisResult.professionalExample}
+                  language={interfaceLanguage}
+                />
+              )}
+
               {/* Action Buttons */}
-              <div className="flex gap-4 justify-center flex-wrap">
+              <div className="flex gap-4 justify-center flex-wrap mt-8">
                 <button 
-                  onClick={() => updateState({ mode: 'home' })}
+                  onClick={() => {
+                    updateState({ mode: 'home' });
+                    setAnalysisResult(null); // Clear analysis result
+                  }}
                   className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
                 >
                   {t.backHome}
                 </button>
                 <button 
-                  onClick={() => updateState({ 
-                    mode: 'game', 
-                    timeLeft: 1200,
-                    submission: { summary: '', impacts: '', structure: '' }
-                  })}
+                  onClick={() => {
+                    updateState({ 
+                      mode: 'game', 
+                      timeLeft: 1200,
+                      submission: { summary: '', impacts: '', structure: '' }
+                    });
+                    setAnalysisResult(null); // Clear analysis result
+                  }}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
                 >
                   {t.tryAgain}
