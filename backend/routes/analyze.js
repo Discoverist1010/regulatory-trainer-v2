@@ -29,18 +29,18 @@ router.post('/', async (req, res) => {
     }
 
     // Analyze with Claude (with local fallback)
+    console.log('🔍 CALLING CLAUDE ANALYSIS...');
     const analysis = await claude.analyzeSubmission(submission, content || '');
     
-    // In analyze.js, after this line: const analysis = await claude.analyzeSubmission(submission, content || '');
-    // Add this detailed debug logging:
-    console.log('=== CLAUDE RESPONSE DEBUG ===');
-    console.log('Analysis keys:', Object.keys(analysis || {}));
-    console.log('Has professionalExample:', !!(analysis && analysis.professionalExample));
-    console.log('professionalExample content:', JSON.stringify(analysis && analysis.professionalExample, null, 2));
-    console.log('Analysis source:', analysis && analysis.source);
-    console.log('Full analysis structure:', JSON.stringify(analysis, null, 2));
-    console.log('=== END CLAUDE DEBUG ===');
-    
+    // DETAILED DEBUG LOGGING
+    console.log('🎯 === CLAUDE RESPONSE DEBUG START ===');
+    console.log('🎯 Analysis keys:', Object.keys(analysis || {}));
+    console.log('🎯 Has professionalExample:', !!(analysis && analysis.professionalExample));
+    console.log('🎯 professionalExample content:', analysis && analysis.professionalExample);
+    console.log('🎯 Analysis source:', analysis && analysis.source);
+    console.log('🎯 Analysis enhanced:', analysis && analysis.enhanced);
+    console.log('🎯 === CLAUDE RESPONSE DEBUG END ===');
+
     const response = {
       success: true,
       score: analysis.score,
@@ -50,6 +50,14 @@ router.post('/', async (req, res) => {
       processingTime: Date.now() - startTime
     };
 
+    // Include professionalExample if it exists
+    if (analysis.professionalExample) {
+      response.professionalExample = analysis.professionalExample;
+      console.log('✅ PROFESSIONAL EXAMPLE INCLUDED IN RESPONSE');
+    } else {
+      console.log('❌ NO PROFESSIONAL EXAMPLE IN CLAUDE RESPONSE');
+    }
+
     if (analysis.message) {
       response.message = analysis.message;
     }
@@ -57,7 +65,7 @@ router.post('/', async (req, res) => {
     res.json(response);
 
   } catch (error) {
-    console.error('Analysis error:', error);
+    console.error('❌ Analysis error:', error);
     
     res.status(500).json({
       success: false,

@@ -84,6 +84,43 @@ app.use((error, req, res, next) => {
   });
 });
 
+// Add this test endpoint to your server.js (after the other debug routes)
+
+app.get('/api/debug/claude-test', async (req, res) => {
+  try {
+    const testSubmission = {
+      summary: "The new regulation requires banks to implement enhanced risk management protocols within 6 months.",
+      impacts: "Banks will need to allocate additional compliance resources and update their risk frameworks.",
+      structure: "Executive Summary, Risk Analysis, Implementation Timeline, Cost Assessment"
+    };
+    
+    console.log('🧪 Testing Claude with sample submission...');
+    const analysis = await claude.analyzeSubmission(testSubmission, "Sample regulatory document about banking risk management requirements.");
+    
+    console.log('🧪 Claude test result keys:', Object.keys(analysis || {}));
+    console.log('🧪 Has professionalExample:', !!(analysis && analysis.professionalExample));
+    
+    res.json({
+      success: true,
+      testSubmission,
+      analysisKeys: Object.keys(analysis || {}),
+      hasProfessionalExample: !!(analysis && analysis.professionalExample),
+      professionalExample: analysis && analysis.professionalExample,
+      source: analysis && analysis.source,
+      score: analysis && analysis.score,
+      feedback: analysis && analysis.feedback
+    });
+    
+  } catch (error) {
+    console.error('🧪 Claude test error:', error);
+    res.json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // 404 handler - MUST BE LAST
 app.use('*', (req, res) => {
   res.status(404).json({
