@@ -9,7 +9,7 @@ import api from './utils/api';
 const translations = {
   en: {
     appTitle: "Regulatory Reporter",
-    appSubtitle: "Master regulatory newsflash writing",
+    appSubtitle: "Practice regulatory newsflash writing",
     trainerSetup: "Trainer Setup",
     studentMode: "Student Mode",
     uploadMaterials: "Upload Training Materials",
@@ -160,6 +160,33 @@ function App() {
 
   const t = translations[interfaceLanguage] || translations.en;
 
+  // Initialize uploaded files from existing session data
+  useEffect(() => {
+    const initializeUploadedFiles = async () => {
+      if (state.sessionId && state.language) {
+        try {
+          // Check if session exists on backend
+          const result = await api.getSession(state.sessionId);
+          if (result.success) {
+            setUploadedFiles(prev => ({
+              ...prev,
+              [state.language]: { 
+                name: result.fileName || 'Uploaded Document.pdf', 
+                sessionId: state.sessionId 
+              }
+            }));
+          }
+        } catch (error) {
+          console.log('Session not found or expired:', error.message);
+          // Clear invalid session from state
+          updateState({ sessionId: null, documentContent: '' });
+        }
+      }
+    };
+
+    initializeUploadedFiles();
+  }, [state.sessionId, state.language]);
+
   // Timer for game mode
   useEffect(() => {
     if (state.mode === 'game' && state.timeLeft > 0) {
@@ -184,20 +211,25 @@ function App() {
     }
 
     await execute(
-      () => api.uploadPDF(file, language, state.sessionTitle),
+      () => api.uploadPDF(file, language, state.sessionTitle || 'Training Session'),
       (result) => {
+        // Update both uploadedFiles state and game state
         setUploadedFiles(prev => ({
           ...prev,
           [language]: { name: file.name, sessionId: result.sessionId }
         }));
-        updateState({ sessionId: result.sessionId });
+        updateState({ 
+          sessionId: result.sessionId,
+          language: language  // Ensure language is set
+        });
+        console.log('Upload successful:', result);
       }
     );
   };
 
   const startTrainingSession = async () => {
     const fileInfo = uploadedFiles[state.language];
-    if (!fileInfo) {
+    if (!fileInfo?.sessionId) {
       alert('Please upload a document for the selected language');
       return;
     }
@@ -209,6 +241,7 @@ function App() {
           mode: 'game',
           documentContent: result.content,
           timeLeft: 1200,
+          sessionId: fileInfo.sessionId,
           submission: { summary: '', impacts: '', structure: '' }
         });
       }
@@ -253,6 +286,12 @@ function App() {
       case 'warning': return <AlertCircle className="w-5 h-5 text-yellow-500" />;
       default: return <AlertCircle className="w-5 h-5 text-red-500" />;
     }
+  };
+
+  // Check if training can start
+  const canStartTraining = () => {
+    const fileInfo = uploadedFiles[state.language];
+    return fileInfo && fileInfo.sessionId && !loading;
   };
 
   // Home Screen
@@ -386,16 +425,32 @@ function App() {
               <div className="text-center">
                 <button 
                   onClick={startTrainingSession}
-                  disabled={!uploadedFiles[state.language] || loading}
-                  className="bg-yellow-500 hover:bg-yellow-400 disabled:bg-gray-600 disabled:cursor-not-allowed text-blue-900 font-bold py-4 px-8 rounded-lg text-xl transition-colors shadow-lg"
+                  disabled={!canStartTraining()}
+                  className={`font-bold py-4 px-8 rounded-lg text-xl transition-colors shadow-lg ${
+                    canStartTraining()
+                      ? 'bg-yellow-500 hover:bg-yellow-400 text-blue-900'
+                      : 'bg-gray-600 cursor-not-allowed text-gray-300'
+                  }`}
                 >
                   {loading ? t.loading : t.startTraining}
                 </button>
                 
-                {!uploadedFiles[state.language] && (
+                {!canStartTraining() && !loading && (
                   <p className="text-blue-300 text-sm mt-3">
-                    Please ask your trainer to upload documents first
+                    {uploadedFiles[state.language] 
+                      ? 'Click to start your training session'
+                      : 'Please ask your trainer to upload documents first'
+                    }
                   </p>
+                )}
+
+                {/* Debug info - remove in production */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="mt-4 text-xs text-blue-300">
+                    <div>Session ID: {state.sessionId || 'None'}</div>
+                    <div>Language: {state.language}</div>
+                    <div>File for {state.language}: {uploadedFiles[state.language]?.name || 'None'}</div>
+                  </div>
                 )}
               </div>
             </>
@@ -670,4 +725,4 @@ function AppWithErrorBoundary() {
   );
 }
 
-export default AppWithErrorBoundary;/* Updated Tue Jun 17 08:55:33 CST 2025 */
+export default AppWithErrorBoundary;
