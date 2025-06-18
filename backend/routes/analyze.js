@@ -30,7 +30,17 @@ router.post('/', async (req, res) => {
 
     // Analyze with Claude (with local fallback)
     const analysis = await claude.analyzeSubmission(submission, content || '');
-
+    
+    // In analyze.js, after this line: const analysis = await claude.analyzeSubmission(submission, content || '');
+    // Add this detailed debug logging:
+    console.log('=== CLAUDE RESPONSE DEBUG ===');
+    console.log('Analysis keys:', Object.keys(analysis || {}));
+    console.log('Has professionalExample:', !!(analysis && analysis.professionalExample));
+    console.log('professionalExample content:', JSON.stringify(analysis && analysis.professionalExample, null, 2));
+    console.log('Analysis source:', analysis && analysis.source);
+    console.log('Full analysis structure:', JSON.stringify(analysis, null, 2));
+    console.log('=== END CLAUDE DEBUG ===');
+    
     const response = {
       success: true,
       score: analysis.score,
