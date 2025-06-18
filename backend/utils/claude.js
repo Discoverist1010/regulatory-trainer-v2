@@ -1,3 +1,5 @@
+// Enhanced backend/utils/claude.js - Paste this into your Railway backend
+
 import Anthropic from '@anthropic-ai/sdk';
 
 class ClaudeAnalyzer {
@@ -5,27 +7,28 @@ class ClaudeAnalyzer {
     this.client = new Anthropic({
       apiKey: process.env.CLAUDE_API_KEY
     });
-    this.retryCount = 3;
+    this.retryCount = 2;
     this.fallbackActive = false;
   }
 
   async analyzeSubmission(submission, documentContent) {
     for (let attempt = 1; attempt <= this.retryCount; attempt++) {
       try {
-        if (this.fallbackActive && Math.random() > 0.1) {
+        if (this.fallbackActive && Math.random() > 0.3) {
           throw new Error('Circuit breaker active');
         }
 
-        const prompt = this.buildPrompt(submission, documentContent);
+        const prompt = this.buildEnhancedPrompt(submission, documentContent);
         
         const response = await this.client.messages.create({
           model: 'claude-3-sonnet-20240229',
-          max_tokens: 1500,
+          max_tokens: 2000,
+          temperature: 0.2, // Lower temperature for more consistent analysis
           messages: [{ role: 'user', content: prompt }]
         });
 
         const analysis = this.parseResponse(response.content[0].text);
-        this.fallbackActive = false; // Success - reset circuit breaker
+        this.fallbackActive = false;
         
         return {
           ...analysis,
@@ -37,53 +40,63 @@ class ClaudeAnalyzer {
         console.error(`Claude API attempt ${attempt} failed:`, error.message);
 
         if (error.status === 429) {
-          // Rate limited - wait and retry
           await this.sleep(1000 * attempt * 2);
         } else if (error.status >= 500) {
-          // Server error - activate circuit breaker
           this.fallbackActive = true;
         }
 
         if (attempt === this.retryCount) {
-          console.warn('All Claude API attempts failed, using local fallback');
-          return this.localFallback(submission);
+          console.warn('All Claude API attempts failed, using enhanced local fallback');
+          return this.enhancedLocalFallback(submission);
         }
       }
     }
   }
 
-  buildPrompt(submission, documentContent) {
-    // Truncate document to save tokens
-    const truncatedDoc = documentContent.slice(0, 2000);
+  buildEnhancedPrompt(submission, documentContent) {
+    const truncatedDoc = documentContent ? documentContent.slice(0, 3000) : 'No document content provided';
     
-    return `You are an expert regulatory writing instructor. Analyze this student's newsflash submission and provide structured feedback.
+    return `You are an expert regulatory writing instructor with 15+ years of experience training financial services professionals. Analyze this student's regulatory newsflash submission with honesty and specific, professional and actionable feedback.
 
 REGULATORY DOCUMENT EXCERPT:
-${truncatedDoc}...
+${truncatedDoc}
 
 STUDENT SUBMISSION:
-Executive Summary: ${submission.summary}
-Impact Analysis: ${submission.impacts}
-Document Structure: ${submission.structure}
+Executive Summary (${submission.summary.trim().split(/\s+/).filter(w => w.length > 0).length} words): "${submission.summary}"
 
-Please provide your response in this exact JSON format:
+Impact Analysis: "${submission.impacts}"
+
+Document Structure: "${submission.structure}"
+
+EVALUATION CRITERIA:
+1. Content Quality: Is this coherent, professional writing that demonstrates understanding?
+2. Summary Length: Should be 30-100 words, appropriately detailed
+3. Business Focus: Does it identify specific client impacts (costs, timelines, risks)?
+4. Regulatory Understanding: Shows grasp of compliance requirements?
+5. Professional Language: Appropriate tone for executive audience?
+
+CRITICAL ASSESSMENT REQUIRED:
+- If content is nonsensical, gibberish, or placeholder text, score very low (0-20) and be explicit about quality issues
+- If content is coherent but basic, provide specific improvement guidance
+- If content is strong, identify what makes it effective
+
+Respond in this EXACT JSON format:
 {
-  "score": 85,
+  "score": [0-100 integer],
   "feedback": {
     "items": [
-      {"type": "good", "text": "Excellent summary length and clarity"},
-      {"type": "warning", "text": "Consider adding more specific cost implications"},
-      {"type": "error", "text": "Missing key compliance requirements"}
+      {"type": "good|warning|error", "text": "Specific observation about their work"},
+      {"type": "good|warning|error", "text": "Another specific point"}
     ],
     "improvements": [
-      "Add specific timeline for implementation requirements",
-      "Include estimated financial impact figures",
-      "Structure with clear section headers for better readability"
+      "Specific actionable improvement #1",
+      "Specific actionable improvement #2",
+      "Specific actionable improvement #3"
     ]
   }
 }
 
-Focus on: clarity, business impact identification, client perspective, and document structure. Score out of 100.`;
+Be specific, professional, honest, and educational. If the work is poor quality, say so clearly and explain why.`;
   }
 
   parseResponse(responseText) {
@@ -91,10 +104,15 @@ Focus on: clarity, business impact identification, client perspective, and docum
       // Try to extract JSON from response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        // Validate the response structure
+        if (parsed.score !== undefined && parsed.feedback && parsed.feedback.items) {
+          return parsed;
+        }
       }
       
-      // Fallback parsing if no JSON found
+      // Fallback parsing if JSON is malformed
       return this.extractFeedbackFromText(responseText);
     } catch (error) {
       console.error('Failed to parse Claude response:', error);
@@ -103,99 +121,108 @@ Focus on: clarity, business impact identification, client perspective, and docum
   }
 
   extractFeedbackFromText(text) {
-    // Basic text parsing fallback
+    // More sophisticated text parsing for non-JSON responses
     const lines = text.split('\n').filter(line => line.trim());
     
+    // Try to extract score
+    const scoreMatch = text.match(/score[:\s]*(\d+)/i);
+    const score = scoreMatch ? parseInt(scoreMatch[1]) : 50;
+    
     return {
-      score: 75, // Default score
+      score: Math.min(Math.max(score, 0), 100),
       feedback: {
         items: [
-          { type: 'good', text: 'AI analysis completed successfully' }
+          { type: 'info', text: 'Claude provided detailed analysis - check logs for full response' }
         ],
         improvements: [
-          'Review the detailed feedback provided',
-          'Focus on clarity and business impact'
+          'Review the specific feedback provided',
+          'Focus on professional language and structure',
+          'Ensure content demonstrates regulatory understanding'
         ]
       }
     };
   }
 
-  createBasicFeedback(originalResponse) {
-    return {
-      score: 70,
-      feedback: {
-        items: [
-          { type: 'warning', text: 'AI analysis partially completed' }
-        ],
-        improvements: [
-          'Ensure executive summary is 30-100 words',
-          'Focus on specific business impacts',
-          'Use clear document structure'
-        ]
-      },
-      rawResponse: originalResponse
-    };
-  }
-
-  localFallback(submission) {
-    console.log('Using local analysis fallback');
+  enhancedLocalFallback(submission) {
+    console.log('Using enhanced local analysis fallback');
     
     let score = 0;
     const feedback = { items: [], improvements: [] };
 
-    // Analyze summary length
+    // Enhanced analysis similar to frontend
     const summaryWords = submission.summary.trim().split(/\s+/).filter(w => w.length > 0).length;
-    if (summaryWords >= 30 && summaryWords <= 100) {
-      score += 30;
-      feedback.items.push({ 
-        type: 'good', 
-        text: `Good summary length (${summaryWords} words)` 
+    const summaryText = submission.summary.toLowerCase();
+    
+    // Check for nonsensical content
+    const isNonsensical = /^[a-z\s]{1,10}$|(.)\1{3,}|^[^a-z]*$/i.test(submission.summary.trim());
+    
+    if (isNonsensical) {
+      feedback.items.push({
+        type: 'error',
+        text: 'Content appears fragmented or insufficient. Please provide coherent regulatory analysis.'
+      });
+      score = 10;
+    } else if (summaryWords >= 30 && summaryWords <= 100) {
+      score += 35;
+      feedback.items.push({
+        type: 'good',
+        text: `Professional summary length (${summaryWords} words)`
       });
     } else {
-      feedback.items.push({ 
-        type: 'warning', 
-        text: `Summary should be 30-100 words (currently ${summaryWords})` 
+      score += Math.max(5, summaryWords);
+      feedback.items.push({
+        type: 'warning',
+        text: `Summary length needs adjustment (${summaryWords} words, need 30-100)`
       });
-      feedback.improvements.push('Adjust summary length to 30-100 words');
     }
 
-    // Analyze impact keywords
-    const impactText = submission.impacts.toLowerCase();
-    const keywords = ['cost', 'compliance', 'risk', 'implementation', 'deadline'];
-    const foundKeywords = keywords.filter(k => impactText.includes(k));
-    
-    if (foundKeywords.length >= 3) {
-      score += 40;
-      feedback.items.push({ 
-        type: 'good', 
-        text: `Good impact analysis covering ${foundKeywords.length} key areas` 
+    // Analyze impact quality
+    if (submission.impacts.length > 100) {
+      score += 30;
+      feedback.items.push({
+        type: 'good',
+        text: 'Comprehensive impact analysis'
       });
     } else {
-      feedback.items.push({ 
-        type: 'warning', 
-        text: 'Consider adding more impact categories (costs, risks, timeline)' 
-      });
-      feedback.improvements.push('Include financial, operational, and compliance impacts');
+      score += 15;
+      feedback.improvements.push('Expand impact analysis with specific business implications');
     }
 
     // Analyze structure
-    const structureText = submission.structure.toLowerCase();
-    if (structureText.includes('summary') || structureText.includes('executive')) {
-      score += 30;
-      feedback.items.push({ 
-        type: 'good', 
-        text: 'Good document structure with executive summary' 
-      });
+    if (submission.structure.length > 50) {
+      score += 25;
     } else {
-      feedback.improvements.push('Start with an executive summary section');
+      feedback.improvements.push('Provide more detailed document structure outline');
+    }
+
+    // Add general improvements
+    if (score < 50) {
+      feedback.improvements.unshift('Focus on coherent, professional regulatory content');
     }
 
     return {
       score: Math.min(score, 100),
       feedback,
       source: 'local',
-      enhanced: false,
-      message: 'Local analysis provided. Enhanced AI feedback will be available when service resumes.'
+      enhanced: true,
+      message: 'Enhanced local analysis provided. Claude AI will provide more detailed feedback when available.'
+    };
+  }
+
+  createBasicFeedback(originalResponse) {
+    return {
+      score: 40,
+      feedback: {
+        items: [
+          { type: 'warning', text: 'AI analysis encountered technical issues' }
+        ],
+        improvements: [
+          'Ensure summary is 30-100 words with specific regulatory details',
+          'Include quantified business impacts and timelines',
+          'Provide clear document structure with section headers'
+        ]
+      },
+      rawResponse: originalResponse
     };
   }
 
