@@ -1,3 +1,4 @@
+import claude from './utils/claude.js';
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -28,6 +29,21 @@ app.use('/api/', limiter);
 app.use('/api/health', healthRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/analyze', analyzeRouter);
+
+// Add this temporary debug route to your backend/server.js
+// (Place it with your other routes)
+app.get('/api/debug/claude', (req, res) => {
+  res.json({
+    hasClaudeKey: !!process.env.CLAUDE_API_KEY,
+    keyPrefix: process.env.CLAUDE_API_KEY ? process.env.CLAUDE_API_KEY.substring(0, 15) + '...' : 'Not found',
+    nodeEnv: process.env.NODE_ENV,
+    // Import claude to check its state
+    claudeState: {
+      fallbackActive: claude.fallbackActive,
+      retryCount: claude.retryCount
+    }
+  });
+});
 
 // Error handling
 app.use((error, req, res, next) => {

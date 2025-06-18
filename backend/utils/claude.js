@@ -1,4 +1,4 @@
-// Enhanced backend/utils/claude.js - Paste this into your Railway backend
+// Fixed backend/utils/claude.js - Replace your current file with this
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -8,27 +8,44 @@ class ClaudeAnalyzer {
       apiKey: process.env.CLAUDE_API_KEY
     });
     this.retryCount = 2;
-    this.fallbackActive = false;
+    this.fallbackActive = false; // Initialize properly
+    
+    // Add debug logging
+    console.log('ClaudeAnalyzer initialized:', {
+      hasApiKey: !!process.env.CLAUDE_API_KEY,
+      keyPrefix: process.env.CLAUDE_API_KEY ? process.env.CLAUDE_API_KEY.substring(0, 10) + '...' : 'Missing'
+    });
   }
 
   async analyzeSubmission(submission, documentContent) {
+    console.log('analyzeSubmission called, fallbackActive:', this.fallbackActive);
+    
+    // Check if we have API key
+    if (!process.env.CLAUDE_API_KEY) {
+      console.warn('No Claude API key found, using local fallback');
+      return this.enhancedLocalFallback(submission);
+    }
+
     for (let attempt = 1; attempt <= this.retryCount; attempt++) {
       try {
-        if (this.fallbackActive && Math.random() > 0.3) {
-          throw new Error('Circuit breaker active');
-        }
+        console.log(`Claude API attempt ${attempt}/${this.retryCount}`);
+
+        // REMOVED PROBLEMATIC CIRCUIT BREAKER LOGIC
+        // The random circuit breaker was preventing API calls
 
         const prompt = this.buildEnhancedPrompt(submission, documentContent);
         
+        console.log('Making Claude API call...');
         const response = await this.client.messages.create({
           model: 'claude-3-sonnet-20240229',
           max_tokens: 2000,
-          temperature: 0.2, // Lower temperature for more consistent analysis
+          temperature: 0.2,
           messages: [{ role: 'user', content: prompt }]
         });
 
+        console.log('Claude API call successful!');
         const analysis = this.parseResponse(response.content[0].text);
-        this.fallbackActive = false;
+        this.fallbackActive = false; // Reset on success
         
         return {
           ...analysis,
@@ -37,20 +54,38 @@ class ClaudeAnalyzer {
         };
 
       } catch (error) {
-        console.error(`Claude API attempt ${attempt} failed:`, error.message);
+        console.error(`Claude API attempt ${attempt} failed:`, {
+          message: error.message,
+          status: error.status,
+          type: error.constructor.name
+        });
 
+        // Handle rate limiting
         if (error.status === 429) {
+          console.log(`Rate limited, waiting ${1000 * attempt * 2}ms...`);
           await this.sleep(1000 * attempt * 2);
-        } else if (error.status >= 500) {
+        } 
+        // Handle server errors
+        else if (error.status >= 500) {
+          console.log('Server error detected, will use fallback after retries');
           this.fallbackActive = true;
         }
+        // Handle auth errors (don't retry these)
+        else if (error.status === 401 || error.status === 403) {
+          console.error('Authentication error - check API key');
+          break; // Don't retry auth errors
+        }
 
+        // If this was the last attempt, use fallback
         if (attempt === this.retryCount) {
           console.warn('All Claude API attempts failed, using enhanced local fallback');
           return this.enhancedLocalFallback(submission);
         }
       }
     }
+
+    // Fallback if all attempts failed
+    return this.enhancedLocalFallback(submission);
   }
 
   buildEnhancedPrompt(submission, documentContent) {
