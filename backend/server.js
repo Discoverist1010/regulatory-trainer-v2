@@ -1,5 +1,3 @@
-import claude from './utils/claude.js';
-//import claude from './backend/utils/claude.js';
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -10,17 +8,30 @@ import healthRouter from './routes/health.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Dynamic import for Claude module
+let claude = null;
+
+// Initialize Claude module
+async function initializeClaude() {
+  try {
+    const claudeModule = await import('./utils/claude.js');
+    claude = claudeModule.default;
+    console.log('✅ Claude module loaded successfully');
+  } catch (error) {
+    console.error('❌ Failed to load Claude module:', error);
+  }
+}
+
 // CORS configuration - Fixed for Vercel deployment
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:5173',
       'http://localhost:3000',
-      'https://regulatory-trainer-v2.vercel.app',  // Your specific Vercel URL
+      'https://regulatory-trainer-v2.vercel.app',
       process.env.FRONTEND_URL
     ].filter(Boolean);
     
-    // Allow requests with no origin (like mobile apps or Postman)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -31,20 +42,17 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400 // 24 hours
+  maxAge: 86400
 };
 
 app.use(cors(corsOptions));
-
-// Handle preflight requests
 app.options('*', cors(corsOptions));
-
 app.use(express.json({ limit: '10mb' }));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window per IP
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: 'Too many requests, please try again later'
 });
 app.use('/api/', limiter);
@@ -54,8 +62,15 @@ app.use('/api/health', healthRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/analyze', analyzeRouter);
 
-// Debug routes - MOVED BEFORE 404 HANDLER
+// Debug routes - with Claude availability check
 app.get('/api/debug/claude', (req, res) => {
+  if (!claude) {
+    return res.status(503).json({
+      success: false,
+      error: 'Claude module not loaded'
+    });
+  }
+  
   res.json({
     hasClaudeKey: !!process.env.CLAUDE_API_KEY,
     keyPrefix: process.env.CLAUDE_API_KEY ? process.env.CLAUDE_API_KEY.substring(0, 15) + '...' : 'Not found',
@@ -68,6 +83,13 @@ app.get('/api/debug/claude', (req, res) => {
 });
 
 app.get('/api/debug/prompt', (req, res) => {
+  if (!claude) {
+    return res.status(503).json({
+      success: false,
+      error: 'Claude module not loaded'
+    });
+  }
+  
   const testSubmission = {
     summary: "Test summary for checking prompt",
     impacts: "Test impact analysis",
@@ -75,7 +97,6 @@ app.get('/api/debug/prompt', (req, res) => {
   };
   
   try {
-    // Get the current prompt being used
     const prompt = claude.buildEnhancedPrompt(testSubmission, "Test document content");
     
     res.json({
@@ -98,19 +119,14 @@ app.get('/api/debug/prompt', (req, res) => {
   }
 });
 
-// Error handling
-app.use((error, req, res, next) => {
-  console.error('Server error:', error);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
-  });
-});
-
-// Add this test endpoint to your server.js (after the other debug routes)
-
 app.get('/api/debug/claude-test', async (req, res) => {
+  if (!claude) {
+    return res.status(503).json({
+      success: false,
+      error: 'Claude module not loaded'
+    });
+  }
+  
   try {
     const testSubmission = {
       summary: "The new regulation requires banks to implement enhanced risk management protocols within 6 months.",
@@ -139,10 +155,19 @@ app.get('/api/debug/claude-test', async (req, res) => {
     console.error('🧪 Claude test error:', error);
     res.json({
       success: false,
-      error: error.message,
-      stack: error.stack
+      error: error.message
     });
   }
+});
+
+// Error handling
+app.use((error, req, res, next) => {
+  console.error('Server error:', error);
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+  });
 });
 
 // 404 handler - MUST BE LAST
@@ -153,9 +178,24 @@ app.use('*', (req, res) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
-}).on('error', (err) => {
-  console.error('❌ Server failed to start:', err);
-});
+// Start server with Claude initialization
+async function startServer() {
+  try {
+    // Initialize Claude first
+    await initializeClaude();
+    
+    // Then start the server
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🤖 Claude module: ${claude ? 'Loaded' : 'Failed to load'}`);
+    }).on('error', (err) => {
+      console.error('❌ Server failed to start:', err);
+    });
+  } catch (error) {
+    console.error('❌ Failed to initialize server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
