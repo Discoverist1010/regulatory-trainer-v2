@@ -10,11 +10,16 @@ class API {
 
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
+    
+    // Don't set Content-Type for FormData
+    const headers = options.body instanceof FormData 
+      ? { ...options.headers }
+      : { ...this.defaultHeaders, ...options.headers };
+    
     const config = {
-      headers: {
-        ...this.defaultHeaders,
-        ...options.headers
-      },
+      mode: 'cors', // Add this line
+      credentials: 'include', // Add this line
+      headers,
       ...options
     };
 
