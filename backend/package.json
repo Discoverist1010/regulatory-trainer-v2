@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
-        "start": "node test.js", //temp changed
+        "start": "node test.js",
         "start-real": "node server.js",
         "dev": "node --watch server.js"
     },
